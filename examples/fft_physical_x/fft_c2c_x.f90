@@ -17,6 +17,8 @@ program fft_c2c_x
    integer :: p_row = 0, p_col = 0
    integer :: resize_domain
    integer :: nranks_tot
+   integer :: nargin, arg, FNLength, status, DecInd
+   character(len=80) :: InputFN
 
    integer, parameter :: ntest = 10  ! repeat test this times
 
@@ -37,6 +39,33 @@ program fft_c2c_x
    nx = nx_base*resize_domain
    ny = ny_base*resize_domain
    nz = nz_base*resize_domain
+   ! Now we can check if user put some inputs
+   ! Handle input file like a boss -- GD
+   nargin=command_argument_count()
+   do arg = 1, nargin
+      call get_command_argument(arg, InputFN, FNLength, status)
+      read(InputFN, *, iostat=status) DecInd
+      if (arg.eq.1) then
+         nx = DecInd
+      elseif (arg.eq.2) then
+         ny = DecInd
+      elseif (arg.eq.3) then
+         nz = DecInd
+      elseif (arg.eq.4) then
+         p_row = DecInd
+      elseif (arg.eq.5) then
+         p_col = DecInd
+      else
+         print *, "Error: Too many arguments!"
+         print *, "  x3div accepts"
+         print *, "  1) nx "
+         print *, "  2) ny "
+         print *, "  3) nz "
+         print *, "  4) p_row (default=0)"
+         print *, "  5) p_col (default=0)"
+      endif
+   enddo
+
    call decomp_2d_init(nx, ny, nz, p_row, p_col)
 
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
