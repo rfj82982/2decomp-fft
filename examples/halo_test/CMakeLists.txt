@@ -1,0 +1,15 @@
+file(GLOB files_test halo_test.f90)
+include_directories(${CMAKE_SOURCE_DIR}/src)
+
+add_executable(halo_test ${files_test})
+target_link_libraries(halo_test PRIVATE decomp2d)
+
+if (BUILD_TARGET MATCHES "gpu")
+  set(example_dir "${PROJECT_BINARY_DIR}/examples/halo_test")
+  message(STATUS "Example dir ${example_dir}")
+  install(FILES bind.sh DESTINATION ${example_dir})
+  file(COPY bind.sh DESTINATION ${example_dir})
+  add_test(NAME halo_test COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ./bind.sh $<TARGET_FILE:halo_test>)
+else ()  
+  add_test(NAME halo_test COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} $<TARGET_FILE:halo_test>)
+endif ()
