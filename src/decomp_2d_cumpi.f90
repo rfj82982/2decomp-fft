@@ -21,8 +21,8 @@ module decomp_2d_cumpi
    private        ! Make everything private unless declared public
    
    ! Device working arrays
-   real(mytype), allocatable, dimension(:), device , public:: work1_r_d, work2_r_d
-   complex(mytype), allocatable, dimension(:), device, public :: work1_c_d, work2_c_d
+   real(mytype), allocatable, dimension(:), device , public, target :: work1_r_d, work2_r_d
+   complex(mytype), allocatable, dimension(:), device, public, target :: work1_c_d, work2_c_d
 
    public :: decomp_2d_cumpi_init, &
              decomp_2d_cumpi_fin

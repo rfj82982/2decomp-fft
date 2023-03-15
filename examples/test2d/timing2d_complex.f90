@@ -6,6 +6,7 @@ program timing2d_complex
 #if defined(_GPU)
    use cudafor
    use openacc
+   use nvtx
 #endif
 
    implicit none
@@ -32,7 +33,7 @@ program timing2d_complex
    complex(mytype) :: cm
 
    double precision :: t1, t2, t3, t4, t5, t6, t7, t8
-   integer :: iter, niter =10
+   integer :: iter, niter =100
 
    ! Init
    error_flag = .false.
@@ -148,11 +149,17 @@ program timing2d_complex
    t6=0.d0
    t8=0.d0
    do iter=1,niter
+      write(*,*) 'START ITERATION ', iter
+      call nvtxStartRange("Iteration")
       !!!!!!!!!!!!!!!!!!!!!!!
       ! x-pensil ==> y-pensil
+      call nvtxStartRange("TR_X_Y")
       t1 = MPI_WTIME()
+      write(*,*) 'Start  transpose_x_to_y'
       call transpose_x_to_y(u1, u2)
+      write(*,*) 'End  transpose_x_to_y'
       t2 = t2 + MPI_WTIME()-t1
+      call nvtxEndRange
 
 #ifdef DEBUG
       if (nrank == 0) then
@@ -167,7 +174,7 @@ program timing2d_complex
       ! 'u1.dat' and 'u2.dat' should be identical byte-by-byte
 
       ! also check the transposition this way
-      !$acc parallel loop default(present) private(m,cm)
+      !$acc parallel loop default(present) 
       do k = yst3, yen3
          do j = yst2, yen2
             do i = yst1, yen1
@@ -184,9 +191,13 @@ program timing2d_complex
 
       !!!!!!!!!!!!!!!!!!!!!!!
       ! y-pensil ==> z-pensil
+      call nvtxStartRange("TR_Y_Z")
       t3 = MPI_WTIME()
+      write(*,*) 'START  transpose_y_to_z'
       call transpose_y_to_z(u2, u3)
+      write(*,*) 'END  transpose_y_to_z'
       t4 = t4 + MPI_WTIME()-t3
+      call nvtxEndRange
 
 #ifdef DEBUG
       if (nrank == 0) then
@@ -217,10 +228,12 @@ program timing2d_complex
 
       !!!!!!!!!!!!!!!!!!!!!!!
       ! z-pensil ==> y-pensil
+      call nvtxStartRange("TR_Z_Y")
       t5 = MPI_WTIME()
       call transpose_z_to_y(u3, u2)
       t6 = t6 + MPI_WTIME()-t5
       ! call decomp_2d_write_one(2,u2,'u2b.dat')
+      call nvtxEndRange
 
       !$acc parallel loop default(present) private(m,cm)
       do k = yst3, yen3
@@ -239,10 +252,12 @@ program timing2d_complex
 
       !!!!!!!!!!!!!!!!!!!!!!!
       ! y-pensil ==> x-pensil
+      call nvtxStartRange("TR_Y_X")
       t7 = MPI_WTIME()
       call transpose_y_to_x(u2, u1)
       t8 = t8 + MPI_WTIME()-t7
       ! call decomp_2d_write_one(1,u1,'u1b.dat')
+      call nvtxEndRange
 
       !$acc parallel loop default(present) private(m,cm)
       do k = xst3, xen3
@@ -258,6 +273,8 @@ program timing2d_complex
       call MPI_ALLREDUCE(MPI_IN_PLACE, error_flag, 1, MPI_LOGICAL, MPI_LOR, MPI_COMM_WORLD, ierror)
       if (ierror /= 0) call decomp_2d_abort(ierror, "MPI_ALLREDUCE")
       if (error_flag) call decomp_2d_abort(4, "error swaping y->x")
+      call nvtxEndRange
+      write(*,*) 'END ITERATION'
    enddo
 
    call MPI_ALLREDUCE(t2, t1, 1, MPI_DOUBLE, MPI_SUM, &

@@ -12,6 +12,8 @@ target_link_libraries(test2d PRIVATE decomp2d)
 target_link_libraries(timing2d_real PRIVATE decomp2d)
 target_link_libraries(timing2d_complex PRIVATE decomp2d)
 
+target_link_options(timing2d_complex PRIVATE "LINKER:-lnvhpcwrapnvtx")
+
 # Run the test(s)
 set(run_dir "${test_dir}/test2d")
 message(STATUS "Example dir ${run_dir}")

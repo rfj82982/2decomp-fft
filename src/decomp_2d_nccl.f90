@@ -131,7 +131,6 @@ contains
      integer, dimension(0:dime-1), intent(in) :: disp_s, cnts_s
      integer, dimension(0:dime-1), intent(in) :: disp_r, cnts_r
 
-
      integer :: col_rank_id, cuda_stat
      type(ncclResult) :: nccl_stat
 
@@ -164,49 +163,80 @@ contains
      implicit none
 
      integer, intent(in) :: dime,buf_size      
-     complex(mytype), dimension(buf_size), intent(in), device :: src_d
-     complex(mytype), dimension(buf_size), intent(out),device :: dst_d
+     complex(mytype), dimension(buf_size), intent(in), device,target :: src_d
+     complex(mytype), dimension(buf_size), intent(out),device,target :: dst_d
      integer, dimension(0:dime-1), intent(in) :: disp_s, cnts_s
      integer, dimension(0:dime-1), intent(in) :: disp_r, cnts_r
+     type(C_DEVPTR) :: cptr_src_d, cptr_dst_d
+     complex(mytype), dimension(:), pointer, device :: ptr_src_d, ptr_dst_d
+     complex(mytype), parameter :: size1 = cmplx(0.0,0.0,mytype)
 
-     integer :: ii
-     
-     ! Send-Recv Real part
-     !$acc kernels default(present)
-     do ii = 1, buf_size
-        work1_r_d(ii) = real(src_d(ii),mytype)
-     enddo     
-     !$acc end kernels
-     call decomp_2d_nccl_send_recv_col(work2_r_d, &
-                                       work1_r_d, &
-                                       disp_s, &
-                                       cnts_s, &
-                                       disp_r, &
-                                       cnts_r, &
-                                       dime    )
-     !$acc kernels default(present)
-     do ii = 1, buf_size
-        dst_d(ii) = cmplx(work2_r_d(ii),0._mytype,mytype)
-     enddo
-     !$acc end kernels
-     ! Send-Recv Immaginary Part
-     !$acc kernels default(present)
-     do ii = 1, buf_size
-        work1_r_d(ii) = aimag(src_d(ii))
-     enddo
-     !$acc end kernels
-     call decomp_2d_nccl_send_recv_col(work2_r_d, &
-                                       work1_r_d, &
-                                       disp_s, &
-                                       cnts_s, &
-                                       disp_r, &
-                                       cnts_r, &
-                                       dime    )
-     !$acc kernels default(present)
-     do ii = 1, buf_size
-        dst_d(ii) = cmplx(dst_d(ii),work2_r_d(ii),mytype)
-     enddo
-     !$acc end kernels
+     integer :: ierror, dep1, dep2
+     integer :: col_rank_id, cuda_stat
+     type(ncclResult) :: nccl_stat
+     !
+     write(*,*) 'Start NCCL complex col ', nrank
+     nccl_stat = ncclGroupStart()
+     if (nccl_stat /= ncclSuccess) call decomp_2d_abort(__FILE__, __LINE__, nccl_stat, "ncclGroupStart")
+     do col_rank_id = 0, (col_comm_size - 1)
+        !
+        write(*,*) 'Nrank peer ', nrank, local_to_global_col(col_rank_id + 1)
+        cptr_src_d = c_devloc(src_d(disp_s(col_rank_id) + 1))
+        call c_f_pointer(cptr_src_d, ptr_src_d, [cnts_s(col_rank_id)])
+        !
+        cptr_dst_d = c_devloc(dst_d(disp_r(col_rank_id) + 1))
+        call c_f_pointer(cptr_dst_d, ptr_dst_d, [cnts_r(col_rank_id)])
+        !
+        nccl_stat = ncclSend(cptr_src_d, cnts_s(col_rank_id)*c_sizeof(size1), &
+                             ncclType, local_to_global_col(col_rank_id + 1), nccl_comm_2decomp, cuda_stream_2decomp)
+        if (nccl_stat /= ncclSuccess) call decomp_2d_abort(__FILE__, __LINE__, nccl_stat, "ncclSend")
+        nccl_stat = ncclRecv(cptr_dst_d, cnts_r(col_rank_id)*c_sizeof(size1), &
+                             ncclType, local_to_global_col(col_rank_id + 1), nccl_comm_2decomp, cuda_stream_2decomp)
+        if (nccl_stat /= ncclSuccess) call decomp_2d_abort(__FILE__, __LINE__, nccl_stat, "ncclRecv")
+        nullify(ptr_src_d)
+        nullify(ptr_dst_d)
+            
+     end do
+     nccl_stat = ncclGroupEnd()
+     if (nccl_stat /= ncclSuccess) call decomp_2d_abort(__FILE__, __LINE__, nccl_stat, "ncclGroupEnd")
+     write(*,*) 'END NCCL complex col ', nrank
+
+     !! Send-Recv Real part
+     !!$acc kernels default(present)
+     !do ii = 1, buf_size
+     !   work1_r_d(ii) = real(src_d(ii),mytype)
+     !enddo     
+     !!$acc end kernels
+     !call decomp_2d_nccl_send_recv_col(work2_r_d, &
+     !                                  work1_r_d, &
+     !                                  disp_s, &
+     !                                  cnts_s, &
+     !                                  disp_r, &
+     !                                  cnts_r, &
+     !                                  dime    )
+     !!$acc kernels default(present)
+     !do ii = 1, buf_size
+     !   dst_d(ii) = cmplx(work2_r_d(ii),0._mytype,mytype)
+     !enddo
+     !!$acc end kernels
+     !! Send-Recv Immaginary Part
+     !!$acc kernels default(present)
+     !do ii = 1, buf_size
+     !   work1_r_d(ii) = aimag(src_d(ii))
+     !enddo
+     !!$acc end kernels
+     !call decomp_2d_nccl_send_recv_col(work2_r_d, &
+     !                                  work1_r_d, &
+     !                                  disp_s, &
+     !                                  cnts_s, &
+     !                                  disp_r, &
+     !                                  cnts_r, &
+     !                                  dime    )
+     !!$acc kernels default(present)
+     !do ii = 1, buf_size
+     !   dst_d(ii) = cmplx(dst_d(ii),work2_r_d(ii),mytype)
+     !enddo
+     !!$acc end kernels
   end subroutine decomp_2d_nccl_send_recv_cmplx_col
   !
   ! Send-Recv Real Row

@@ -147,23 +147,24 @@
      complex(mytype), dimension(:, :, :), intent(IN) :: src
      complex(mytype), dimension(:, :, :), intent(OUT) :: dst
      TYPE(DECOMP_INFO), intent(IN) :: decomp
-#if defined(_GPU)
-     integer :: istat, nsize
-#endif
-     if (dims(1) == 1) then
-#if defined(_GPU)
-        nsize =  product(decomp%xsz)
-        !$acc host_data use_device(src,dst)
-        istat = cudaMemcpy(dst, src, nsize, cudaMemcpyDeviceToDevice)
-        !$acc end host_data
-        if (istat /= 0) call decomp_2d_abort(__FILE__, __LINE__, istat, "cudaMemcpy")
-#else
-        dst=src
-#endif       
-     else
+!#if defined(_GPU)
+!     integer :: istat, nsize
+!#endif
+!     if (dims(1) == 1) then
+!#if defined(_GPU)
+!        nsize =  product(decomp%xsz)
+!        !$acc host_data use_device(src,dst)
+!        istat = cudaMemcpy(dst, src, nsize, cudaMemcpyDeviceToDevice)
+!        !$acc end host_data
+!        if (istat /= 0) call decomp_2d_abort(__FILE__, __LINE__, istat, "cudaMemcpy")
+!#else
+!        dst=src
+!#endif       
+!     else
         call transpose_x_to_y_complex(src, dst, decomp)
-     endif
-
+!     endif
+!
+      write(*,*) 'transpose_x_to_y_complex'
   end subroutine transpose_x_to_y_complex_long
   
   subroutine transpose_x_to_y_complex(src, dst, decomp)
@@ -175,7 +176,7 @@
      TYPE(DECOMP_INFO), intent(IN) :: decomp
 
      integer :: s1, s2, s3, d1, d2, d3
-     integer :: ierror
+     integer :: ierror, i
 
 #ifdef PROFILER
      if (decomp_profiler_transpose) call decomp_profiler_start("transp_x_y_c")
@@ -208,6 +209,7 @@
 
 #if defined(_GPU)
 #if defined(_NCCL)
+     write(*,*) 'Before NCCL '
      call decomp_2d_nccl_send_recv_col(work2_c_d,     &
                                        work1_c_d,     &
                                        decomp%x1disp, &
@@ -216,6 +218,16 @@
                                        decomp%y1cnts, &  
                                        dims(1)      , &
                                        decomp_buf_size)
+    write(*,*) 'After NCCL'
+    ierror = cudaMemcpy(work1_c,work1_c_d,decomp_buf_size,cudaMemcpyDeviceToHost)
+    write(*,*) 'after first Memcpy'
+    ierror = cudaMemcpy(work2_c,work2_c_d,decomp_buf_size,cudaMemcpyDeviceToHost)
+    write(*,*) 'after first Memcpy'
+    do i=1,decomp_buf_size
+       write(*,*) 'wk1 ', work1_c(i)
+       write(*,*) 'wk2 ', work2_c(i)
+       write(*,*)
+    enddo
 #else
      call MPI_ALLTOALLV(work1_c_d, decomp%x1cnts, decomp%x1disp, &
                         complex_type, work2_c_d, decomp%y1cnts, decomp%y1disp, &
@@ -233,8 +245,10 @@
 
      ! rearrange receive buffer
 #if defined(_GPU)
+     write(*,*) 'Before MEM MERGE'
      call mem_merge_xy_complex(work2_c_d, d1, d2, d3, dst, dims(1), &
                                decomp%y1dist, decomp)
+     write(*,*) 'After MEM MERGE'
 #else
      call mem_merge_xy_complex(work2_c, d1, d2, d3, dst, dims(1), &
                                decomp%y1dist, decomp)
